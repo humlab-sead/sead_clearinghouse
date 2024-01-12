@@ -115,7 +115,7 @@ function generate_deploy() {
     echo "Prerequisites  "                                                              >> $target_folder/${crid}.sql
     echo "Reviewer"                                                                     >> $target_folder/${crid}.sql
     echo "Approver"                                                                     >> $target_folder/${crid}.sql
-    echo "Idempotent     NO!                                                            >> $target_folder/${crid}.sql
+    echo "Idempotent     NO!"                                                           >> $target_folder/${crid}.sql
     echo "Notes          Use --single-transaction on execute!"                          >> $target_folder/${crid}.sql
     echo "***************************************************************************/" >> $target_folder/${crid}.sql
 
