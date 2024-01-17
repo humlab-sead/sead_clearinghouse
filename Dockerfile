@@ -1,4 +1,4 @@
-FROM php:7.2-cli-stretch as clearinghouse-base
+FROM php:7.2-cli-buster as clearinghouse-base
 
 ARG container_version=1.0
 ARG container_maintainer=roger.mahler@umu.se
