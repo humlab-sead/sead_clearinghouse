@@ -7,17 +7,14 @@ A clearinghouse system for the SEAD database including script for reporting and 
 These instructions will get you a copy of the project up and running on your local machine for development and testing purposes. See deployment for notes on how to deploy the project on a live system.
 
 ### Prerequisites
-What things you need to install the software and how to install them
-```
-- Docker
-```
+
+Just make sure you have `docker` installed.
+
 #### Setup development environment
 
 ##### Build and run development PHP-server (Docker image)
-```
-% docker build --file dev.Dockerfile -t ch/dev:latest .
-% sead_clearing_house>docker run --rm --env-file .docker.env -p 88:88 -p 9000:9000 -v C:\Users\roma0050\Documents\Projects\SEAD\sead_clearing_house:/home ch/dev:latest
-```
+
+
 Clone the project from source.
 ```bash
 git clone https://github.com/humlab/sead_clearinghouse.git
@@ -43,6 +40,10 @@ CH_PORT=port
 CH_DATABASE=database
 CH_USER=username
 CH_PASSWORD=password
+```
+```
+% docker build --file dev.Dockerfile -t ch/dev:latest .
+% docker run --rm --env-file .docker.env -p 88:88 -p 9000:9000 -v "path-to-local-project"/sead_clearing_house:/home ch/dev:latest
 ```
 
 #### Setup the clearinghouse database
