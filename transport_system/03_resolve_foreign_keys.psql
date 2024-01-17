@@ -26,11 +26,11 @@ begin
     select array_to_string(array_agg(
                 case
                     when is_pk = 'YES'  then
-                        format(E'\t\t\tcase when e.transport_id <= 0 then null else e.transport_id end as %I', column_name)
+                        format(E'\t\t\tcase when e.transport_id <= 0 then null else e.transport_id end::%2$s as %1$I', column_name, data_type)
                     when is_fk = 'YES' then
-                        format(E'\t\t\tcase when e.%I > 0 then e.%I else fk%s.transport_id end as %s', column_name, column_name, ordinal_position, column_name)
+                        format(E'\t\t\tcase when e.%1$I > 0 then e.%1$I else fk%2$s.transport_id end::%3$s as %1$s', column_name, ordinal_position, data_type)
                     when column_name = 'date_updated' then
-                        format(E'\t\t\tcase when e.date_updated is null then now() else e.date_updated end as %s', column_name)
+                        format(E'\t\t\tcase when e.date_updated is null then now() else e.date_updated end::%2$s as %1$s', column_name, data_type)
                     else
                         E'\t\t\te.' || column_name
                 end order by ordinal_position), E',\n') as field_clauses,
