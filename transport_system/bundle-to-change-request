@@ -1,0 +1,195 @@
+#!/bin/bash
+
+SHELL=/bin/bash
+
+set -e  # Exit script on any error
+
+g_script_name=`basename "$0"`
+g_script_dir=$(cd "$( dirname "${BASH_SOURCE[0]}")" && pwd )
+g_add_change_request=NO
+g_work_folder=./tmp
+g_sccs_root=$HOME/source/sead_change_control
+g_project=subsystem
+g_related_issue_id=
+g_create_issue=--create-issue
+g_cr_name=
+g_note=
+g_cmd_prefix=
+
+function usage() {
+    local usage_error="$1"
+    if [ "$usage_error" != "" ]; then
+        echo "error: $usage_error"
+    fi
+    echo "usage: $g_script_name [OPTION] ..."
+    echo ""options:
+    echo "       --add-change-request        Add CR to to SEAD Control System"
+    echo "       --note                      Note added to CR and issue"
+    echo "       --related-issue-id          Related issue Github id"
+    echo "       --no-create-issue           Do not create issue" 
+    echo "       --dry-run                   Do not create CR or issue - just print commands"
+    echo "       --sead-change-control-root  Path to SEAD Change Control System"
+    echo "       --work-folder=dir           Override default work dir (not recommended)"
+    exit 64
+}
+
+POSITIONAL=()
+while [[ $# -gt 0 ]]
+do
+    key="$1"
+    case $key in
+        --work-folder)
+            g_work_folder="$2";
+            shift 2
+        ;;        
+        --add-change-request)
+            g_add_change_request="YES";
+            shift
+        ;;
+        --sead-change-control-root)
+            g_sccs_root="$2";
+            shift 2
+        ;;
+        --note|-n)
+            g_note="$2";
+            shift 2;
+        ;;
+        --related-issue-id)
+            g_related_issue_id="$2";
+            shift 2;
+        ;;
+        --no-create-issue)
+            g_create_issue="";
+            shift;
+        ;;
+        --dry-run)
+            g_cmd_prefix="echo ";
+            shift;
+        ;;
+        --help)
+            usage ;
+            exit 0
+        ;;
+        --*)
+            usage  "error: invalid option $1"
+            exit 64
+        ;;
+        *)
+            POSITIONAL+=("$1") # save it in an array for later
+            shift
+        ;;
+    esac
+done
+
+function generate_cr_name() {
+    day=$(date +%Y%m%d)
+    cr_x="${day}_DDL_CLEARINGHOUSE_TRANSPORT_SYSTEM"
+    echo "${cr_x^^}"
+}
+
+function generate_change_request() {
+
+    local work_folder=$1/$2
+    local cr_name=$2
+    local project=$3
+    local cr_author=`getent passwd $USER | cut -d ':' -f 5 | cut -d ',' -f 1`
+    local note="New release of Clearinghouse Transport System"
+
+    rm -rf $work_folder
+    mkdir -p $work_folder
+
+    echo "notice: generating change request $cr_name in $work_folder"
+
+    echo "Deploy $g_project: $cr_name"                                                  >> $work_folder/$cr_name.sql
+    echo "/***************************************************************************" >> $work_folder/$cr_name.sql
+    echo "  Author         $cr_author"                                                  >> $work_folder/$cr_name.sql
+    echo "  Date           $(date +%Y%m%d)"                                             >> $work_folder/$cr_name.sql
+    echo "  Description    $note"                                                       >> $work_folder/$cr_name.sql
+    echo "  Prerequisites  "                                                            >> $work_folder/$cr_name.sql
+    echo "  Reviewer"                                                                   >> $work_folder/$cr_name.sql
+    echo "  Approver"                                                                   >> $work_folder/$cr_name.sql
+    echo "  Idempotent     Yes"                                                         >> $work_folder/$cr_name.sql
+    echo "  Notes          Use --single-transactin on execute!"                         >> $work_folder/$cr_name.sql
+    echo "***************************************************************************/" >> $work_folder/$cr_name.sql
+
+    echo "--set constraints all deferred;"                                              >> $work_folder/$cr_name.sql
+    echo "set client_min_messages to warning;"                                          >> $work_folder/$cr_name.sql
+    echo "-- set autocommit off;"                                                       >> $work_folder/$cr_name.sql
+    echo "-- begin;"                                                                    >> $work_folder/$cr_name.sql
+
+    cat $g_script_dir/01_setup_transport_schema.psql                                    >> $work_folder/$cr_name.sql
+    cat $g_script_dir/02_resolve_primary_keys.psql                                      >> $work_folder/$cr_name.sql
+    cat $g_script_dir/03_resolve_foreign_keys.psql                                      >> $work_folder/$cr_name.sql
+    cat $g_script_dir/04_script_data_transport.psql                                     >> $work_folder/$cr_name.sql
+
+    echo "select clearing_house_commit.generate_sead_tables();"                         >> $work_folder/$cr_name.sql
+    echo "select clearing_house_commit.generate_resolve_functions('public', false);"    >> $work_folder/$cr_name.sql
+
+	echo "-- commit;"                                                                   >> $work_folder/$cr_name.sql
+
+    echo "notice: change request has been generated to $work_folder"
+}
+
+function add_change_request_to_change_control_system()
+{
+    echo "notice: adding change request to ${g_sccs_root}..."
+
+    local work_folder=$(realpath "$1/$2")
+    local cr_name=$2
+    local project=$3
+    local note=$4
+    local sccs_root=absolute_path=$(realpath "$g_sccs_root")
+
+    if [ "$note" == "" ]; then
+        note="Update of Clearing House Import System."
+    fi
+
+    if [ "$g_related_issue_id" != "" ]; then
+        note="$note See https://github.com/humlab-sead/sead_change_control/issues/$g_related_issue_id."
+    fi
+
+    if [ ! -f $work_folder/$cr_name.sql ]; then
+        echo "failure: cannot add change request since $work_folder/$cr_name.sql is missing"
+        exit 64
+    fi
+
+    if [ ! -d "$sccs_root/bin/add-change-request" ]; then
+        echo "failure: $sccs_root is not a valid SEAD Change Control System root folder"
+        exit 64
+    fi
+
+    local deploy_file=$sccs_root/${project}/deploy/$cr_name.sql
+
+    if [ -f "$sccs_root/$project/deploy/$cr_name.sql" ]; then
+        echo "failure: CR $cr_name.sql already exists (unable to resolve conflict)"
+        exit 64
+    fi
+
+    local this_folder=`pwd`
+
+    $g_cmd_prefix cd $sccs_root
+    
+    $g_cmd_prefix ./bin/add-change-request --project $project --change $cr_name --create-issue --note "$note"
+
+    $g_cmd_prefix cp -f $work_folder/$cr_name.sql ./$project/deploy/$cr_name.sql
+
+    echo "notice: change request $cr_name has been added to SEAD CSS repository!"
+    echo "notice: please remember to commit repository!"
+
+    cd $this_folder
+
+}
+
+if [ "$g_work_folder" == "" ]; then
+    g_work_folder="./tmp/$g_cr_name"
+    rm -rf "$g_work_folder"
+    echo "notice: using $g_work_folder as temporary folder"
+fi
+
+g_cr_name=`generate_cr_name`
+
+generate_change_request $g_work_folder $g_cr_name $g_project
+
+if [ "$g_add_change_request" == "YES" ]; then
+    add_change_request_to_change_control_system $g_work_folder $g_cr_name $g_project "$g_note"
+fi
