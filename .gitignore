@@ -22,3 +22,5 @@ api-cache/
 .docker.env
 .docker-env
 docker-compose.yml
+
+**/tmp
