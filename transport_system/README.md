@@ -1,28 +1,36 @@
+# Bundle SEAD Clearing House Transport System to a Change Request Script
 
-# SEAD Clearinghouse Commit and Deploy Sub-system
+This script, [`bundle-to-change-request`](command:_github.copilot.openRelativePath?%5B%22..%2Fsead_clearinghouse%2Ftransport_system%2Fbundle-to-change-request%22%5D "../sead_clearinghouse/transport_system/bundle-to-change-request"), is a Bash script that automates the process of generating and adding a change request to the SEAD Change Control System that installs (or updates) the SEAD clearing house transport system.
 
-SEAD sub-system that deploys a SEAD clearinghouse submission to the public SEAD database via the SEAD Change Control System (SEAD CCS).
+## Usage
 
-## Approach and Postulates
+You can run the script with various options:
 
-The system creates a complete `SEAD CCS` using the following steps:
-    1. Create a copy out SQL script that exports all the data into compressed text files
-    2. Runs the copy out script
-    3. Creates a copy in script that can be used as a SEAD CCS task
-    4. Optionally: Creates a SEAD CCS task
-    5. Optionally: Deploys the SEAD CCS to a `sqitch` target
+- `--add-change-request`: Add a change request to the SEAD Control System.
+- `--note`: Add a note to the change request and issue.
+- `--related-issue-id`: Specify a related issue Github id.
+- `--no-create-issue`: Do not create an issue.
+- `--dry-run`: Do not create a change request or issue - just print commands.
+- `--sead-change-control-root`: Specify the path to the SEAD Change Control System.
+- `--work-folder=dir`: Override the default work directory (not recommended).
 
-The export and import are carried out using client side psql `\copy` commands. All files are hence stored locally.
+## Example
 
-# Installation
+```sh
+./bundle-to-change-request --add-change-request --note "This is a test note" --related-issue-id 123
+```
 
-Please make sure that you have an up-to-date local (clones) copy of the SEAD Clearinghouse source code. It can be checked out from `https://github.com/humlab-sead/sead_clearinghouse.git`.
-    1. `cd path-to-source/sql/transport_system`
-    2. `chmod +x ./install_transport_system.bash`
-    3. `./install_transport_system.bash --dbhost="sead-server" --dbname="target-database"`
+This will generate a change request in the SEAD change control system, add a note to it, and link it to the Github issue with the id 123.
 
-The installation creates (or recreates) schema `clearing_house_commit' consisting of all the necessary scripts. The schema contains not data, just functions and views.
+## Requirements
 
-## How to execute
+This script requires Bash and access to the SEAD Change Control System.
 
-    ./sqitch.sh add --change-name ${crid} --note "Deploy of Clearinghouse submission {$submission_id}." -C ./${ccs_project}
+## License
+
+This project is licensed under the MIT License - see the LICENSE.md file for details.
+
+## Acknowledgments
+
+- Thanks to the SEAD project for providing the opportunity to develop this script.
+
