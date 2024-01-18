@@ -18,7 +18,7 @@ create or replace function clearing_house_commit.generate_copy_in_script(
     p_table_name text,
     p_pk_name text,
     p_target_folder text = '/tmp',
-    p_allow_delete boolean = FALSE,
+    p_delete_existing boolean = FALSE,
 ) returns text as $$
 declare v_sql text;
 declare v_delete_sql text;
@@ -48,7 +48,7 @@ select clearing_house_commit.reset_serial_id(''public'', ''#TABLE#'', ''#PK#'');
 drop table if exists clearing_house_commit.temp_#TABLE#;
 ';
 
-    v_delete_sql = case when p_allow_delete then E'
+    v_delete_sql = case when p_delete_existing then E'
 delete from public.#TABLE#
     where #PK# in (select #PK# from clearing_house_commit.temp_#TABLE#);' else '' end;
 
