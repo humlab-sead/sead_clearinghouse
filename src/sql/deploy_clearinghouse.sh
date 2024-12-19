@@ -11,7 +11,8 @@ sead_ccs_folder=
 sqitch_command=./docker-sqitch.sh
 target_project=subsystem
 script_folder=`pwd`
-on_schema_exists=abort
+on_schema_exists=drop
+author="Roger Mähler"
 
 function usage() {
     echo "usage: $script_name [--force] [--add-change-request [--sead-ccs-folder=path|--add-to-git-clone]] "
@@ -72,53 +73,75 @@ function generate_change_request() {
     rm -rf $target_folder
     mkdir -p $target_folder
 
-    echo ""                                                                                > $target_folder/${crid}.sql
+    echo "-- Deploy subsystem: $crid"                                                      > $target_folder/${crid}.sql
+    echo "-- NOTE DO NOT CHANGE THIS FILE! USE CH ./src/sql/deploy_clearinghouse.sh"      >> $target_folder/${crid}.sql
     echo "/***************************************************************************"   >> $target_folder/${crid}.sql
-    echo "Author         $USER"                                                           >> $target_folder/${crid}.sql
+    echo "Author         $author"                                                         >> $target_folder/${crid}.sql
     echo "Date           $day"                                                            >> $target_folder/${crid}.sql
-    echo "Description    "                                                                >> $target_folder/${crid}.sql
+    echo "Description    Deploy of Clearinghouse Transport System."                       >> $target_folder/${crid}.sql
+    echo "Issue          https://github.com/humlab-sead/sead_change_control/issues/215"   >> $target_folder/${crid}.sql
     echo "Prerequisites  "                                                                >> $target_folder/${crid}.sql
     echo "Reviewer"                                                                       >> $target_folder/${crid}.sql
     echo "Approver"                                                                       >> $target_folder/${crid}.sql
     echo "Idempotent     YES"                                                             >> $target_folder/${crid}.sql
     echo "Notes          Use --single-transactin on execute!"                             >> $target_folder/${crid}.sql
     echo "***************************************************************************/"   >> $target_folder/${crid}.sql
-
-    echo "--set constraints all deferred;"                                                >> $target_folder/${crid}.sql
+    echo ""                                                                               >> $target_folder/${crid}.sql
+    echo "set client_encoding = 'UTF8';"                                                  >> $target_folder/${crid}.sql
+    echo "set standard_conforming_strings = on;"                                          >> $target_folder/${crid}.sql
     echo "set client_min_messages to warning;"                                            >> $target_folder/${crid}.sql
-    echo "-- set autocommit off;"                                                         >> $target_folder/${crid}.sql
-    echo "-- begin;"                                                                      >> $target_folder/${crid}.sql
-
 
     if [ "$on_schema_exists" == "drop" ]; then
+        echo ""                                                                           >> $target_folder/${crid}.sql
         echo "drop schema if exists clearing_house cascade;"                              >> $target_folder/${crid}.sql
     fi
 
-    echo "create schema if not exists clearing_house authorization clearinghouse_worker;" >> $target_folder/${crid}.sql
-    echo ""
+    echo ""                                                                                 >> $target_folder/${crid}.sql
+    echo "create schema if not exists clearing_house authorization clearinghouse_worker;"   >> $target_folder/${crid}.sql
+    echo ""                                                                                 >> $target_folder/${crid}.sql
+    echo "set role clearinghouse_worker;"                                                   >> $target_folder/${crid}.sql
+    echo ""                                                                                 >> $target_folder/${crid}.sql
+    echo "\set autocommit off;"                                                             >> $target_folder/${crid}.sql
+    echo ""                                                                                 >> $target_folder/${crid}.sql
+    echo "\cd /repo/subsystem/deploy"                                                       >> $target_folder/${crid}.sql
+    echo ""                                                                                 >> $target_folder/${crid}.sql
+    echo "begin;"                                                                           >> $target_folder/${crid}.sql
+    echo ""                                                                                 >> $target_folder/${crid}.sql
 
-    cat ./00_assign_privileges.sql                                                        >> $target_folder/${crid}.sql
-    cat ./01_utility_functions.sql                                                        >> $target_folder/${crid}.sql
-    cat ./02_create_clearinghouse_model.sql                                               >> $target_folder/${crid}.sql
-    cat ./02_populate_clearinghouse_model.sql                                             >> $target_folder/${crid}.sql
-    cat ./03_create_public_model.sql                                                      >> $target_folder/${crid}.sql
+    for file in $(ls src/sql/0[0,1,2,3,4]*.sql); do
+        echo "-- $file"                                                                     >> $target_folder/${crid}.sql
+        cat $file                                                                           >> $target_folder/${crid}.sql
+        echo ""                                                                             >> $target_folder/${crid}.sql
+    done
 
-    echo "call clearing_house.create_clearinghouse_model(false);"                         >> $target_folder/${crid}.sql
-    echo "call clearing_house.populate_clearinghouse_model();"                            >> $target_folder/${crid}.sql
-    echo "call clearing_house.create_public_model(false, false);"                         >> $target_folder/${crid}.sql
+    echo "call clearing_house.create_clearinghouse_model(false);"                           >> $target_folder/${crid}.sql
+    echo "call clearing_house.populate_clearinghouse_model();"                              >> $target_folder/${crid}.sql
+    echo "call clearing_house.create_public_model(false, false);"                           >> $target_folder/${crid}.sql
 
-    cat ./04_copy_xml_to_rdb.sql                                                          >> $target_folder/${crid}.sql
+    for file in $(ls src/sql/05*.sql); do
+        echo ""                                                                             >> $target_folder/${crid}.sql
+        echo "-- $file"                                                                     >> $target_folder/${crid}.sql
+        cat $file                                                                           >> $target_folder/${crid}.sql
+        echo ""                                                                             >> $target_folder/${crid}.sql
+    done
 
-    cat ./05_review_ceramic_values.sql                                                    >> $target_folder/${crid}.sql
-    cat ./05_review_dataset.sql                                                           >> $target_folder/${crid}.sql
-    cat ./05_review_sample.sql                                                            >> $target_folder/${crid}.sql
-    cat ./05_review_sample_group.sql                                                      >> $target_folder/${crid}.sql
-    cat ./05_review_site.sql                                                              >> $target_folder/${crid}.sql
-    cat ./06_report_procedures.sql                                                        >> $target_folder/${crid}.sql
+    for file in $(ls src/sql/review/*.sql); do
+        echo ""                                                                             >> $target_folder/${crid}.sql
+        echo "-- $file"                                                                     >> $target_folder/${crid}.sql
+        cat $file                                                                           >> $target_folder/${crid}.sql
+        echo ""                                                                             >> $target_folder/${crid}.sql
+    done
 
-    echo "-- select clearing_house.chown('clearing_house', 'clearinghouse_worker');"      >> $target_folder/${crid}.sql
+    for file in $(ls src/sql/reporting/*.sql); do
+        echo ""                                                                             >> $target_folder/${crid}.sql
+        echo "-- $file"                                                                     >> $target_folder/${crid}.sql
+        cat $file                                                                           >> $target_folder/${crid}.sql
+        echo ""                                                                             >> $target_folder/${crid}.sql
+    done
 
-	echo "-- commit;"                                                                     >> $target_folder/${crid}.sql
+	echo "commit;"                                                                          >> $target_folder/${crid}.sql
+    echo ""                                                                                 >> $target_folder/${crid}.sql
+	echo "reset role;"                                                                      >> $target_folder/${crid}.sql
 
     echo "notice: change request has been generated to $target_folder"
 }
@@ -220,5 +243,4 @@ if [ "$add_change_request" == "YES" ]; then
     add_change_request_to_change_control_system
 
 fi
-
 

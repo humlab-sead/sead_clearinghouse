@@ -1,21 +1,3 @@
-/*****************************************************************************************************************************
-**	Type	clearing_house.transport_type
-******************************************************************************************************************************/
-
-do $$
-begin
-    if not exists (
-        select 1
-        from pg_type
-        join pg_namespace
-          on pg_type.typnamespace = pg_namespace.oid
-        where typname = 'transport_type'
-          and nspname = 'clearing_house'
-    ) then
-        create domain clearing_house.transport_type char
-            check (value is null or value in ('C', 'U', 'D')) default null null;
-    end if;
-end $$ language plpgsql;
 
 /*****************************************************************************************************************************
 **	Function	fn_rdb_schema_script_table
@@ -25,27 +7,43 @@ end $$ language plpgsql;
 **	Revisions
 ******************************************************************************************************************************/
 -- Select clearing_house.fn_create_schema_type_string('character varying', 255, null, null, 'YES')
-Create Or Replace Function clearing_house.fn_create_schema_type_string(
+create or replace function clearing_house.fn_create_schema_type_string(
 	data_type character varying(255),
 	character_maximum_length int,
 	numeric_precision int,
 	numeric_scale int,
-	is_nullable character varying(10)
-) Returns text As $$
-	Declare type_string text;
-Begin
+	is_nullable character varying(10),
+  column_default text = null
+) returns text as $$
+	declare type_string text;
+begin
 	type_string :=  data_type
-		||	Case When data_type = 'character varying' And Coalesce(character_maximum_length, 0) > 0
-                    Then '(' || Coalesce(character_maximum_length::text, '255') || ')'
-				 When data_type = 'numeric' Then
-					Case When numeric_precision Is Null And numeric_scale Is Null Then  ''
-						 When numeric_scale Is Null Then  '(' || numeric_precision::text || ')'
-						 Else '(' || numeric_precision::text || ', ' || numeric_scale::text || ')'
-					End
-				 Else '' End || ' '|| Case When Coalesce(is_nullable,'') = 'YES' Then 'null' Else 'not null' End;
+		||	case
+          when data_type = 'character varying' and coalesce(character_maximum_length, 0) > 0
+            then '(' || coalesce(character_maximum_length::text, '255') || ')'
+				  when data_type = 'numeric'
+            then
+              case
+                when numeric_precision is null and numeric_scale is null then  ''
+                when numeric_scale is null then  '(' || numeric_precision::text || ')'
+                else '(' || numeric_precision::text || ', ' || numeric_scale::text || ')'
+              End
+				  else ''
+        end || ' ' ||
+          case
+            when coalesce(is_nullable,'') = 'YES'
+              then 'null'
+            else 'not null'
+          end ||
+          case
+            when coalesce(column_default, '') != '' then ' default ' || column_default
+            when data_type = 'uuid' then ' default uuid_generate_v4()'
+            else ''
+          end
+        ;
 	return type_string;
 
-End $$ Language plpgsql;
+end $$ language plpgsql;
 
 /*****************************************************************************************************************************
 **	Function	fn_script_public_db_entity_table
@@ -63,13 +61,13 @@ End $$ Language plpgsql;
 **	TODO		Add keys on foreign indexes to improve performance.
 ******************************************************************************************************************************/
 -- Select clearing_house.fn_script_public_db_entity_table('public', 'clearing_house', 'tbl_sites')
-Create Or Replace Function clearing_house.fn_script_public_db_entity_table(p_source_schema character varying(255), p_target_schema character varying(255), p_table_name character varying(255)) Returns text As $$
+create or replace function clearing_house.fn_script_public_db_entity_table(p_source_schema character varying(255), p_target_schema character varying(255), p_table_name character varying(255)) Returns text As $$
 	Declare sql_stmt text;
 	Declare data_columns text;
 	Declare pk_columns text;
 Begin
 
-    Select string_agg(column_name || ' ' || clearing_house.fn_create_schema_type_string(data_type, character_maximum_length, numeric_precision, numeric_scale, is_nullable), E',\n        ' ORDER BY ordinal_position ASC),
+    Select string_agg(column_name || ' ' || clearing_house.fn_create_schema_type_string(data_type, character_maximum_length, numeric_precision, numeric_scale, is_nullable, column_default), E',\n        ' ORDER BY ordinal_position ASC),
            string_agg(Case When is_pk = 'YES' Then column_name Else Null End, E', ' ORDER BY ordinal_position ASC)
     Into Strict data_columns, pk_columns
     From clearing_house.fn_dba_get_sead_public_db_schema('public', 'sead_master') s
@@ -114,7 +112,7 @@ End $$ Language plpgsql;
 ******************************************************************************************************************************/
 -- Select clearing_house.fn_create_public_db_entity_tables('clearing_house')
 -- Select * From clearing_house.tbl_clearinghouse_sead_create_table_log
-Create Or Replace Function clearing_house.fn_create_public_db_entity_tables(
+create or replace function clearing_house.fn_create_public_db_entity_tables(
     target_schema character varying(255),
     p_only_drop BOOLEAN = FALSE,
     p_dry_run BOOLEAN = TRUE
@@ -163,9 +161,9 @@ End $$ Language plpgsql;
 **	Revisions
 ******************************************************************************************************************************/
 
-CREATE OR REPLACE FUNCTION clearing_house.fn_create_local_to_public_id_view() RETURNS VOID AS $$
-DECLARE v_sql text;
-BEGIN
+create or replace function clearing_house.fn_create_local_to_public_id_view() RETURNS VOID AS $$
+declare v_sql text;
+begin
 
 	SELECT string_agg(' SELECT submission_id, ''' || table_name || ''' as table_name, local_db_id, public_db_id from clearing_house.' || table_name || '', E'  \nUNION ')
 		INTO STRICT v_sql
@@ -174,10 +172,10 @@ BEGIN
 	  AND is_pk = 'YES';
 
 	v_sql = E'
-		DROP VIEW IF EXISTS clearing_house.view_local_to_public_id;
-		CREATE MATERIALIZED VIEW clearing_house.view_local_to_public_id AS \n' || v_sql	|| ';
-		DROP INDEX IF EXISTS idx_view_local_to_public_id;
-		CREATE INDEX idx_view_local_to_public_id ON clearing_house.view_local_to_public_id (submission_id, table_name, local_db_id);';
+		drop view if exists clearing_house.view_local_to_public_id;
+		create materialized view clearing_house.view_local_to_public_id as \n' || v_sql	|| ';
+		drop index if exists idx_view_local_to_public_id;
+		create index idx_view_local_to_public_id on clearing_house.view_local_to_public_id (submission_id, table_name, local_db_id);';
 
 	EXECUTE v_sql;
 
@@ -185,7 +183,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- SELECT clearing_house.fn_create_local_to_public_id_view();
--- CREATE OR REPLACE FUNCTION clearing_house.fn_local_to_public_id(int,varchar,int) RETURNS INT
+-- create or replace function clearing_house.fn_local_to_public_id(int,varchar,int) RETURNS INT
 -- 	AS 'SELECT public_db_id FROM clearing_house.view_local_to_public_id WHERE submission_id = $1 and table_name = $2 and local_db_id = $3; '
 -- 	LANGUAGE SQL STABLE RETURNS NULL ON NULL INPUT;
 
@@ -202,7 +200,7 @@ $$ LANGUAGE plpgsql;
 **	Revisions
 ******************************************************************************************************************************/
 -- Select clearing_house.fn_add_new_public_db_columns(2, 'tbl_datasets')
-Create Or Replace Function clearing_house.fn_add_new_public_db_columns(
+create or replace function clearing_house.fn_add_new_public_db_columns(
     p_submission_id int, p_table_name character varying(255)
 ) Returns void As $$
 
@@ -243,15 +241,15 @@ Begin
 		Raise Exception 'Fatal error. Unknown column found in XML. Target table %, column %s does not exist.',  x.table_name_underscored,  x.column_name_underscored;
 
 		sql := format('Alter Table clearing_house.%I Add Column %I %s null;',
-            p_table_name, x.column_name_underscored, clearing_house.fn_java_type_to_PostgreSQL(x.data_type)
+            p_table_name, x.column_name_underscored, clearing_house.fn_java_type_to_postgresql(x.data_type)
         );
 
 		Execute sql;
 
-		Raise Notice 'Added new column: % % % [%]', x.table_name_underscored,  x.column_name_underscored , clearing_house.fn_java_type_to_PostgreSQL(x.data_type), sql;
+		Raise Notice 'Added new column: % % % [%]', x.table_name_underscored,  x.column_name_underscored , clearing_house.fn_java_type_to_postgresql(x.data_type), sql;
 
         Insert Into clearing_house.tbl_clearinghouse_sead_unknown_column_log (submission_id, table_name, column_name, column_type, alter_sql)
-            Values (p_submission_id, x.table_name_underscored, x.column_name_underscored, clearing_house.fn_java_type_to_PostgreSQL(x.data_type), sql);
+            Values (p_submission_id, x.table_name_underscored, x.column_name_underscored, clearing_house.fn_java_type_to_postgresql(x.data_type), sql);
 
 	End Loop;
 
@@ -267,7 +265,7 @@ End $$ Language plpgsql;
 **	Revisions
 ******************************************************************************************************************************/
 -- Select clearing_house.fn_script_local_union_public_entity_view('clearing_house', 'clearing_house', 'public', 'tbl_dating_uncertainty')
-Create Or Replace Function clearing_house.fn_script_local_union_public_entity_view(
+create or replace function clearing_house.fn_script_local_union_public_entity_view(
     target_schema character varying(255),
     local_schema character varying(255),
     public_schema character varying(255),
@@ -343,7 +341,7 @@ End $$ Language plpgsql;
 -- Select clearing_house.fn_create_local_union_public_entity_views('clearing_house', 'clearing_house', FALSE, TRUE)
 -- Select * From clearing_house.tbl_clearinghouse_sead_create_view_log
 -- Drop Function clearing_house.fn_create_local_union_public_entity_views(character varying(255), character varying(255), BOOLEAN, BOOLEAN);
-Create Or Replace Function clearing_house.fn_create_local_union_public_entity_views(
+create or replace function clearing_house.fn_create_local_union_public_entity_views(
     target_schema character varying(255),
     local_schema character varying(255),
     p_only_drop BOOLEAN = FALSE,
@@ -393,22 +391,23 @@ End $$ Language plpgsql;
 **	Revisions
 ******************************************************************************************************************************/
 
-Create Or Replace Function clearing_house.fn_generate_foreign_key_indexes()
-Returns void As $$
-Declare x RECORD;
-Begin
-	For x In (
+create or replace function clearing_house.fn_generate_foreign_key_indexes()
+  returns void as $$
+  declare x record;
+begin
+	for x In (
 
-        Select 'Create Index idx_' || target_constraint_name || ' On clearing_house.' || target_table || ' (' || target_colname || ');' as create_script,
-               'Drop Index If Exists clearing_house.idx_' || target_constraint_name || ';' as drop_script
-        From (
-            select	(select nspname from pg_namespace where oid=m.relnamespace)																as target_ns,
-                    m.relname																												as target_table,
-                    (select a.attname from pg_attribute a where a.attrelid = m.oid and a.attnum = o.conkey[1] and a.attisdropped = false)	as target_colname,
-                    o.conname																												as target_constraint_name,
-                    (select nspname from pg_namespace where oid=f.relnamespace)																as foreign_ns,
-                    f.relname																												as foreign_table,
-                    (select a.attname from pg_attribute a where a.attrelid = f.oid and a.attnum = o.confkey[1] and a.attisdropped = false)	as foreign_colname
+        select 'create index idx_' || target_constraint_name || ' on clearing_house.' || target_table || ' (' || target_colname || ');' as create_script,
+               'drop index if exists clearing_house.idx_' || target_constraint_name || ';' as drop_script
+        from (
+            select
+                (select nspname from pg_namespace where oid=m.relnamespace) as target_ns,
+                m.relname as target_table,
+                (select a.attname from pg_attribute a where a.attrelid = m.oid and a.attnum = o.conkey[1] and a.attisdropped = false)	as target_colname,
+                o.conname as target_constraint_name,
+                (select nspname from pg_namespace where oid=f.relnamespace)	as foreign_ns,
+                f.relname as foreign_table,
+                (select a.attname from pg_attribute a where a.attrelid = f.oid and a.attnum = o.confkey[1] and a.attisdropped = false)as foreign_colname
             from pg_constraint o
             left join pg_class c
               on c.oid = o.conrelid
@@ -420,21 +419,26 @@ Begin
               and o.conrelid in (select oid from pg_class c where c.relkind = 'r')
             order by 2
         ) as x
-        Left Join pg_indexes i
-          On i.schemaname = 'clearing_house'
-         And i.tablename =  target_table
-         And i.indexname =  'idx_' || target_constraint_name
-        Where target_ns = 'public'
-          And i.indexname is null
-    ) Loop
-        Raise Notice '%', x.drop_script;
-        Raise Notice '%', x.create_script;
+        left Join pg_indexes i
+          on i.schemaname = 'clearing_house'
+         and i.tablename =  target_table
+         and i.indexname =  'idx_' || target_constraint_name
+        where target_ns = 'public'
+          and i.indexname is null
+          and target_table in (
+            select table_name
+            from information_schema.tables
+            where table_schema = 'clearing_house'
+          )
+    ) loop
+        raise notice '%', x.drop_script;
+        raise notice '%', x.create_script;
 
-        Execute x.drop_script;
-        Execute x.create_script;
-    End Loop;
+        execute x.drop_script;
+        execute x.create_script;
+    end loop;
 
-End $$ Language plpgsql;
+end $$ language plpgsql;
 
 /*****************************************************************************************************************************
 **	Function	fn_create_clearinghouse_public_db_model
@@ -447,14 +451,14 @@ End $$ Language plpgsql;
 **	Revisions
 ******************************************************************************************************************************/
 
-Create Or Replace Procedure clearing_house.create_public_model(
-    p_only_drop BOOLEAN = FALSE,
-    p_dry_run BOOLEAN = TRUE
-) As $$
-Begin
+create or replace procedure clearing_house.create_public_model(
+    p_only_drop boolean = false,
+    p_dry_run boolean = true
+) as $$
+begin
 
-    Perform clearing_house.fn_create_public_db_entity_tables('clearing_house', p_only_drop, p_dry_run);
-    Perform clearing_house.fn_generate_foreign_key_indexes();
-    Perform clearing_house.fn_create_local_union_public_entity_views('clearing_house', 'clearing_house', p_only_drop, p_dry_run);
+    perform clearing_house.fn_create_public_db_entity_tables('clearing_house', p_only_drop, p_dry_run);
+    perform clearing_house.fn_generate_foreign_key_indexes();
+    perform clearing_house.fn_create_local_union_public_entity_views('clearing_house', 'clearing_house', p_only_drop, p_dry_run);
 
-End $$ Language plpgsql;
+end $$ language plpgsql;
