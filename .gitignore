@@ -24,3 +24,4 @@ api-cache/
 docker-compose.yml
 
 **/tmp
+.vscode/
