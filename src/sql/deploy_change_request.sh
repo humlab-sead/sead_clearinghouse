@@ -1,5 +1,7 @@
 #!/bin/bash
 
+SHELL=/bin/bash
+
 set -e  # Exit script on any error
 
 script_name=`basename "$0"`
@@ -13,6 +15,9 @@ target_project=subsystem
 script_folder=`pwd`
 on_schema_exists=drop
 author="Roger Mähler"
+
+g_real_path=$(readlink -f "${BASH_SOURCE[0]}")
+g_scripts_folder=SCRIPT_DIR=$(dirname "$g_real_path")
 
 function usage() {
     echo "usage: $script_name [--force] [--add-change-request [--sead-ccs-folder=path|--add-to-git-clone]] "
@@ -108,7 +113,7 @@ function generate_change_request() {
     echo "begin;"                                                                           >> $target_folder/${crid}.sql
     echo ""                                                                                 >> $target_folder/${crid}.sql
 
-    for file in $(ls src/sql/0[0,1,2,3,4]*.sql); do
+    for file in $(ls $g_scripts_folder/0[0,1,2,3,4]*.sql); do
         echo "-- $file"                                                                     >> $target_folder/${crid}.sql
         cat $file                                                                           >> $target_folder/${crid}.sql
         echo ""                                                                             >> $target_folder/${crid}.sql
@@ -125,14 +130,14 @@ function generate_change_request() {
         echo ""                                                                             >> $target_folder/${crid}.sql
     done
 
-    for file in $(ls src/sql/review/*.sql); do
+    for file in $(ls $g_scripts_folder/review/*.sql); do
         echo ""                                                                             >> $target_folder/${crid}.sql
         echo "-- $file"                                                                     >> $target_folder/${crid}.sql
         cat $file                                                                           >> $target_folder/${crid}.sql
         echo ""                                                                             >> $target_folder/${crid}.sql
     done
 
-    for file in $(ls src/sql/reporting/*.sql); do
+    for file in $(ls $g_scripts_folder/reporting/*.sql); do
         echo ""                                                                             >> $target_folder/${crid}.sql
         echo "-- $file"                                                                     >> $target_folder/${crid}.sql
         cat $file                                                                           >> $target_folder/${crid}.sql
