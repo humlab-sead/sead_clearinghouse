@@ -232,32 +232,32 @@ create or replace view clearing_house.view_foreign_keys as (
             t.relname,
             attr.attname,
             attr.attnum
-        from
-            pg_class t
-            join pg_namespace ns on ns.oid = t.relnamespace
-            join pg_attribute attr on attr.attrelid = t.oid
-                and attr.attnum > 0
-)
-            select distinct
-                t.nspname as schema_name,
-                t.oid as table_oid,
-                t.relname as table_name,
-                t.attname as column_name,
-                t.attnum as attnum,
-                s.nspname as f_schema_name,
-                s.relname as f_table_name,
-                s.attname as f_column_name,
-                s.oid as f_table_oid,
-                t.attnum as f_attnum
-            from
-                pg_constraint
-            join table_columns t on t.oid = pg_constraint.conrelid
-                and t.attnum = pg_constraint.conkey[1]
-                and (t.attnum = any (pg_constraint.conkey))
-            join table_columns s on s.oid = pg_constraint.confrelid
-                and (s.attnum = any (pg_constraint.confkey))
-        where
-            pg_constraint.contype = 'f'::"char");
+        from pg_class t
+        join pg_namespace ns on ns.oid = t.relnamespace
+        join pg_attribute attr
+          on attr.attrelid = t.oid
+         and attr.attnum > 0
+    )
+        select distinct
+            t.nspname as schema_name,
+            t.oid as table_oid,
+            t.relname as table_name,
+            t.attname as column_name,
+            t.attnum as attnum,
+            s.nspname as f_schema_name,
+            s.relname as f_table_name,
+            s.attname as f_column_name,
+            s.oid as f_table_oid,
+            t.attnum as f_attnum
+        from pg_constraint
+        join table_columns t
+            on t.oid = pg_constraint.conrelid
+            and t.attnum = pg_constraint.conkey[1]
+            and (t.attnum = any (pg_constraint.conkey))
+        join table_columns s on s.oid = pg_constraint.confrelid
+            and (s.attnum = any (pg_constraint.confkey))
+    where
+        pg_constraint.contype = 'f'::"char");
 
 
 /*********************************************************************************************************************************
