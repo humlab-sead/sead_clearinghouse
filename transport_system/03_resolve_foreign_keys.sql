@@ -31,6 +31,8 @@ begin
                         format(E'\t\t\tcase when e.%1$I > 0 then e.%1$I else fk%2$s.transport_id end::%3$s as %1$s', column_name, ordinal_position, data_type)
                     when column_name = 'date_updated' then
                         format(E'\t\t\tcase when e.date_updated is null then now() else e.date_updated end::%2$s as %1$s', column_name, data_type)
+                    when column_name like '%_uuid' then
+                        format(E'\t\t\tcase when e.%1$s is null then uuid_generate_v4() else e.%1$s end::%2$s as %1$s', column_name, data_type)
                     else
                         E'\t\t\te.' || column_name
                 end order by ordinal_position), E',\n') as field_clauses,
