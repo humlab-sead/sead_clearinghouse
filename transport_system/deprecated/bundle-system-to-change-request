@@ -39,36 +39,21 @@ do
     key="$1"
     case $key in
         --work-folder)
-            g_work_folder="$2";
-            shift 2
-        ;;        
+            g_work_folder="$2"; shift 2 ;;        
         --add-change-request)
-            g_add_change_request="YES";
-            shift
-        ;;
+            g_add_change_request="YES"; shift ;;
         --sead-change-control-root)
-            g_sccs_root="$2";
-            shift 2
-        ;;
+            g_sccs_root="$2"; shift 2 ;;
         --note|-n)
-            g_note="$2";
-            shift 2;
-        ;;
+            g_note="$2"; shift 2; ;;
         --related-issue-id)
-            g_related_issue_id="$2";
-            shift 2;
-        ;;
+            g_related_issue_id="$2"; shift 2; ;;
         --no-create-issue)
-            g_create_issue="";
-            shift;
-        ;;
+            g_create_issue=""; shift; ;;
         --dry-run)
-            g_cmd_prefix="echo ";
-            shift;
-        ;;
+            g_cmd_prefix="echo "; shift; ;;
         --help)
             usage ;
-            exit 0
         ;;
         --*)
             usage  "error: invalid option $1"
