@@ -3,26 +3,29 @@
 **  What      all stuff related to ch data commit
 **********************************************************************************************************************************/
 
-do $$
-begin
+set role humlab_admin;
 
-    drop schema if exists clearing_house_commit cascade;
+\o /dev/null
 
-    create schema if not exists clearing_house_commit;
+drop schema if exists clearing_house_commit cascade \g /dev/null
 
-    create type clearing_house_commit.resolve_primary_keys_result as (
-        submission_id int,
-        table_name text,
-        column_name text,
-        update_sql text,
-        action text,
-        row_count int,
-        start_id int,
-        status_id int,
-        execute_date timestamp
-    );
+\o
 
-end $$ language plpgsql;
+create schema if not exists clearing_house_commit authorization clearinghouse_worker;
+
+create type clearing_house_commit.resolve_primary_keys_result as (
+    submission_id int,
+    table_name text,
+    column_name text,
+    update_sql text,
+    action text,
+    row_count int,
+    start_id int,
+    status_id int,
+    execute_date timestamp
+);
+
+set role clearinghouse_worker;
 
 create or replace function clearing_house_commit.commit_submission(p_submission_id int)
 	returns void
