@@ -30,8 +30,6 @@ begin
  ** #ENTITY#
  ************************************************************************************************************************************/
 
-\\echo ''Deploying #ENTITY#'';
-
 drop table if exists clearing_house_commit.temp_#TABLE#;
 create table clearing_house_commit.temp_#TABLE# as select * from public.#TABLE# where FALSE;
 
@@ -40,10 +38,13 @@ create table clearing_house_commit.temp_#TABLE# as select * from public.#TABLE# 
 
 insert into public.#TABLE#
     select *
-    from clearing_house_commit.temp_#TABLE#
-    /* on conflict (v_pk_name) update set list-of-all-fields */;
+    from clearing_house_commit.temp_#TABLE# ;
 
+\\echo Deployed #ENTITY#, rows inserted: :ROW_COUNT
+
+\\o /dev/null
 select clearing_house_commit.reset_serial_id(''public'', ''#TABLE#'', ''#PK#'');
+\\o
 
 drop table if exists clearing_house_commit.temp_#TABLE#;
 ';
