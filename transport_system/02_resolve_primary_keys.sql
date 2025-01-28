@@ -1,6 +1,28 @@
 set session schema 'clearing_house_commit';
 
 /*********************************************************************************************************************************
+**  Function    clearing_house_commit.get_max_transported_id
+**  Who         Roger Mähler
+**  When
+**  What        Gets the max transported/commited ID for a given table in the transport system
+**  Used By     Transport system, during resolve and assignment of primary keys
+**  Revisions
+**********************************************************************************************************************************/
+
+create or replace function clearing_house_commit.get_max_transported_id(p_table_name character varying) returns int as $$
+declare
+    v_id int = 0;
+    v_sql text = '';
+begin
+    v_sql = format(
+        'select coalesce(max(transport_id), 0) + 1 from clearing_house.%s',
+        case when p_table_name not like '%.%' then p_table_name else split_part(p_table_name, '.', 2) end
+    );
+    execute v_sql into v_id;
+    return coalesce(v_id, 0);
+end $$ language plpgsql;
+
+/*********************************************************************************************************************************
 **  Function    clearing_house_commit.reset_serial_id
 **  Who         Roger Mähler
 **  When
@@ -17,25 +39,27 @@ create or replace function clearing_house_commit.reset_serial_id(
 ) returns int as $$
 declare
     v_sql text = '';
-    v_next_id integer;
-    v_seq_id character varying;
+    v_id integer;
+    v_sequence_name text;
+    v_max_transport_id int = 0;
 begin
+
+    v_sequence_name  = pg_get_serial_sequence(format('%s', p_table_name), p_column_name);
+
+    v_max_transport_id = clearing_house_commit.get_max_transported_id(p_table_name);
 
     if p_table_name not like format('%s.%%', p_schema_name) then
         p_table_name = format('%s.%s', p_schema_name, p_table_name);
     end if;
 
     v_sql = format('select max(%s) from %s', p_column_name, p_table_name);
+    execute v_sql into v_id;
 
-    execute v_sql into v_next_id;
+    v_id = greatest(coalesce(v_id, 1), 1, v_max_transport_id);
 
-    v_next_id = greatest(coalesce(v_next_id, 1), 1);
-    v_seq_id  = pg_get_serial_sequence(format('%s', p_table_name), p_column_name);
+    perform setval(v_sequence_name, v_id);
 
-    perform setval(v_seq_id, v_next_id);
-
-    return v_next_id;
-
+    return v_id;
 end $$ language plpgsql;
 
 /*********************************************************************************************************************************
@@ -48,6 +72,7 @@ end $$ language plpgsql;
 **  Revisions
 **********************************************************************************************************************************/
 
+
 create or replace function clearing_house_commit.get_next_id(
     p_schema_name character varying,
     p_table_name character varying,
@@ -55,22 +80,29 @@ create or replace function clearing_house_commit.get_next_id(
     p_reset_id boolean = FALSE
 ) returns int as $$
 declare
-    v_next_id               int = 0;
-    v_sequence_name         character varying;
-    v_transport_id_sql      text = '';
-    v_next_transport_id     int = 0;
+    v_next_id              int = 0;
+    v_sequence_name        text;
+    v_transport_id_sql     text = '';
+    v_max_transport_id     int = 0;
+    v_dynamic_sql          text = '';
 begin
 
-    if p_reset_id is TRUE then
-        perform clearing_house_commit.reset_serial_id(p_schema_name, p_table_name, p_column_name);
-    end if;
+    v_max_transport_id = clearing_house_commit.get_max_transported_id(p_table_name);
 
     if p_table_name not like format('%s.%%', p_schema_name) then
         p_table_name = format('%s.%s', p_schema_name, p_table_name);
     end if;
 
     v_sequence_name = pg_get_serial_sequence(p_table_name, p_column_name);
-    v_next_id = nextval(v_sequence_name);
+    if v_sequence_name is not null then
+        if p_reset_id is TRUE then
+            perform clearing_house_commit.reset_serial_id(p_schema_name, p_table_name, p_column_name);
+        end if;
+        v_next_id = nextval(v_sequence_name);
+    else
+        v_dynamic_sql = format('select max(%s) + 1 from %s', p_column_name, p_table_name);
+        execute v_dynamic_sql into v_next_id;
+    end if;
 
     -- Find MAX assigned id from transport_system (pending insert)
     v_transport_id_sql = format(
@@ -78,9 +110,9 @@ begin
         case when p_table_name not like '%.%' then p_table_name else split_part(p_table_name, '.', 2) end
     );
 
-    execute v_transport_id_sql into v_next_transport_id;
+    execute v_transport_id_sql into v_max_transport_id;
 
-    v_next_id = GREATEST(v_next_id, v_next_transport_id);
+    v_next_id = greatest(v_next_id, v_max_transport_id);
 
     return v_next_id;
 
