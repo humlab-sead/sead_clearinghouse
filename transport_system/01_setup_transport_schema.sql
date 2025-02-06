@@ -3,6 +3,8 @@
 **  What      all stuff related to ch data commit
 **********************************************************************************************************************************/
 
+reset role;
+
 set role humlab_admin;
 
 \o /dev/null
@@ -24,6 +26,8 @@ create type clearing_house_commit.resolve_primary_keys_result as (
     status_id int,
     execute_date timestamp
 );
+
+reset role;
 
 set role clearinghouse_worker;
 
@@ -69,13 +73,13 @@ begin
 
 	--, is_lookup, is_aggregate_root, aggregate_root
 	insert into clearing_house_commit.tbl_sead_tables (table_name, pk_name, entity_name)
-		select x.table_name, x.column_name, clearing_house.fn_sead_table_entity_name(x.table_name::text)
+		select distinct x.table_name, x.column_name, clearing_house.fn_sead_table_entity_name(x.table_name::text)
 		from clearing_house.fn_dba_get_sead_public_db_schema() x
 		where true
           and x.table_schema = 'public'
-          and x.is_pk = 'YES'
-        on conflict (table_name)
-        do update set (pk_name, entity_name) = (excluded.pk_name, excluded.entity_name);
+          and x.is_pk = 'YES';
+        -- on conflict (table_name)
+        -- do update set (pk_name, entity_name) = (excluded.pk_name, excluded.entity_name);
 
     update clearing_house_commit.tbl_sead_tables
         set is_global_lookup = 'YES'
