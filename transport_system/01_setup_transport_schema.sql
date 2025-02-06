@@ -7,13 +7,12 @@ reset role;
 
 set role humlab_admin;
 
-\o /dev/null
-
-drop schema if exists clearing_house_commit cascade \g /dev/null
-
-\o
-
+drop schema if exists clearing_house_commit cascade;
 create schema if not exists clearing_house_commit authorization clearinghouse_worker;
+
+reset role;
+
+set role clearinghouse_worker;
 
 create type clearing_house_commit.resolve_primary_keys_result as (
     submission_id int,
@@ -26,10 +25,6 @@ create type clearing_house_commit.resolve_primary_keys_result as (
     status_id int,
     execute_date timestamp
 );
-
-reset role;
-
-set role clearinghouse_worker;
 
 create or replace function clearing_house_commit.commit_submission(p_submission_id int)
 	returns void
