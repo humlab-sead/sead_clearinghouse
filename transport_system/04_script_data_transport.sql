@@ -71,14 +71,13 @@ insert into public.#TABLE# (#COLUMNS#)
     select #COLUMNS#
     from clearing_house_commit.temp_#TABLE# ;
 
-\\echo Deployed #ENTITY#, rows inserted: :ROW_COUNT
-
 \\o /dev/null
 select clearing_house_commit.reset_serial_id(''public'', ''#TABLE#'', ''#PK#'');
 \\o
 
 drop table if exists clearing_house_commit.temp_#TABLE#;
 ';
+-- \\echo Deployed #ENTITY#, rows inserted: :ROW_COUNT
 
     v_delete_sql = case when p_delete_existing then E'
 delete from public.#TABLE#
