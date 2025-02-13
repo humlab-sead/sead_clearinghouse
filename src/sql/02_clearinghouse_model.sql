@@ -166,7 +166,8 @@ begin
 
     create table if not exists clearing_house.tbl_clearinghouse_submissions(
         submission_id serial not null,
-        submission_name text not null unique default uuid_generate_v4()::text,
+        submission_name text not null unique default uuid_generate_v4()::text,  -- alternative human readable key
+        source_name text not null unique, -- submissions source name (filename)
         submission_state_id integer not null,
         data_types character varying(255 ),
         upload_user_id integer not null,
@@ -175,7 +176,7 @@ begin
         claim_user_id integer,
         claim_date_time date,
         submission_uuid uuid not null default uuid_generate_v4(),
-        constraint pk_submission_id primary key(submission_id ),
+        constraint pk_submission_id primary key(submission_id ),   -- alternative key
         constraint fk_tbl_submissions_user_id_user_id foreign key(claim_user_id ) references clearing_house.tbl_clearinghouse_users(user_id ) match simple on update no action on delete no action,
         constraint fk_tbl_submissions_state_id_state_id foreign key(submission_state_id ) references clearing_house.tbl_clearinghouse_submission_states(submission_state_id ) match simple on update no ACTION on delete no ACTION
     );
