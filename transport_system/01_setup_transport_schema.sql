@@ -14,18 +14,6 @@ reset role;
 
 set role clearinghouse_worker;
 
-create type clearing_house_commit.resolve_primary_keys_result as (
-    submission_id int,
-    table_name text,
-    column_name text,
-    update_sql text,
-    action text,
-    row_count int,
-    start_id int,
-    status_id int,
-    execute_date timestamp
-);
-
 create or replace function clearing_house_commit.commit_submission(p_submission_id int)
 	returns void
 as $$
