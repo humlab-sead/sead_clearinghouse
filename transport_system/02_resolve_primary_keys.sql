@@ -134,7 +134,7 @@ begin
 
 		with clearinghouse_pk_columns as (
 
-			select table_name_underscored as tablename, st.column_name as columnname
+			select table_name_underscored as table_name, st.column_name as column_name
 			from clearing_house.tbl_clearinghouse_submission_xml_content_tables cxt
 			join clearing_house.tbl_clearinghouse_submission_tables ct using (table_id)
 			join clearing_house.fn_dba_get_sead_public_db_schema() st on st.table_name = ct.table_name_underscored
@@ -150,7 +150,7 @@ begin
 				from pg_class
 				where relkind = 'S'
 			)
-				select sch.nspname as schemaname, tab.relname as tablename, col.attname as columnname, col.attnum as columnnumber, seqs.sequencename
+				select sch.nspname as schemaname, tab.relname as table_name, col.attname as column_name, col.attnum as columnnumber, seqs.sequencename
 				from pg_attribute col
 				join pg_class tab on col.attrelid = tab.oid
 				join pg_namespace sch on tab.relnamespace = sch.oid
@@ -164,24 +164,24 @@ begin
 
 		) select *
 		  from clearinghouse_pk_columns
-		  join sead_sequence_columns using (tablename, columnname)
+		  join sead_sequence_columns using (table_name, column_name)
 
 	) Loop
 
-		v_sql := format('select max(transport_id) from clearing_house.%s', v_data.tablename);
+		v_sql := format('select max(transport_id) from clearing_house.%s', v_data.table_name);
 
 		execute v_sql into v_max_transport_id;
 
-		v_sql := format('select max(%s) from public.%s', v_data.columnname, v_data.tablename);
+		v_sql := format('select max(%s) from public.%s', v_data.column_name, v_data.table_name);
 
 		execute v_sql into v_max_pk_value;
 
 		if coalesce(v_max_transport_id, 0) > coalesce(v_max_pk_value,0) then
 
-			v_sequence_name = pg_get_serial_sequence(format('%s', v_data.tablename), v_data.columnname);
+			v_sequence_name = pg_get_serial_sequence(format('%s', v_data.table_name), v_data.column_name);
 
 			raise info 'Adjusting sequence % on %.% to % (was %)',
-				v_sequence_name, v_data.tablename, v_data.columnname, v_max_transport_id, v_max_pk_value;
+				v_sequence_name, v_data.table_name, v_data.column_name, v_max_transport_id, v_max_pk_value;
 
 			perform setval(v_sequence_name, v_max_transport_id);
 
@@ -197,17 +197,17 @@ end $$ language plpgsql;
 **  When
 **  What        Assigns a public ID in field "transport_id" to all records in given table. Type of CRUD op. (C or U)
 **              are stored in field "transport_type".
-**              Existing records are assign "public_db_id", and new records are assigned next ID in sequence.
+**              Existing records are assigned "public_db_id", and new records are assigned next ID in sequence.
 **              Note that the serial in the public DB is left untouched (apart from a reset) by this function.
 **  Used By     Transport system, during packaging of a new CH submission transfer
 **  Returns     Next serial ID in sequence
 **  Idempotant  YES
 **  Revisions
 **********************************************************************************************************************************/
---select * from clearing_house_commit.resolve_primary_key(1, 'public', 'tbl_sites', 'site_id', 'source_name', 'cr_name')
---drop function clearing_house_commit.resolve_primary_key(int, text,text,text,text,text)
+--select * from clearing_house_commit.resolve_primary_key('XYZ', 'public', 'tbl_sites', 'site_id', 'source_name', 'cr_name')
+--drop function clearing_house_commit.resolve_primary_key(text, text,text,text,text,text)
 create or replace function clearing_house_commit.resolve_primary_key(
-    p_submission_id int,
+    p_submission_name text,
     p_schema_name text,
     p_table_name text,
     p_pk_name text,
@@ -217,15 +217,22 @@ create or replace function clearing_house_commit.resolve_primary_key(
 declare
     v_sql text;
     v_next_id integer;
+    v_submission_id integer;
 begin
     begin
+
+        v_submission_id := (
+            select submission_id
+            from clearing_house.tbl_clearinghouse_submissions
+            where submission_name = p_submission_name
+        );
 
         -- FIXME update preallocated ids
         v_sql = format('
             update clearing_house.%1$I
             set transport_id = null, transport_date = null, transport_type = null
             where clearing_house.%1$I.submission_id = %2$s;
-        ', p_table_name, p_submission_id);
+        ', p_table_name, v_submission_id);
 
         if coalesce(p_cr_name,'') != '' and coalesce(p_source_name,'') != '' then
             v_sql = v_sql || format('
@@ -243,7 +250,7 @@ begin
                 from allocated_identities a
                 where clearing_house.%3$I.submission_id = %5$s
                   and -(clearing_house.%3$I.local_db_id::int) = a.local_db_id;
-            ', p_source_name, p_cr_name, p_table_name, p_pk_name, p_submission_id);
+            ', p_source_name, p_cr_name, p_table_name, p_pk_name, v_submission_id);
         end if;
         
         v_next_id = clearing_house_commit.get_next_id(p_schema_name, p_table_name, p_pk_name, true);
@@ -261,7 +268,7 @@ begin
                 from new_keys n
                 where clearing_house.%2$I.submission_id = %3$s
                 and clearing_house.%2$I.local_db_id = n.local_db_id;
-        ', v_next_id - 1, p_table_name, p_submission_id);
+        ', v_next_id - 1, p_table_name, v_submission_id);
 
         --raise notice '%', v_sql;
         return v_sql;
@@ -292,7 +299,7 @@ end;$$ language plpgsql;
 -- FIXME: resolve_primary_keys allocates an existing public_id to a new record, which is not correct
 
 create or replace procedure clearing_house_commit.resolve_primary_keys(
-    p_submission_id int,
+    p_submission_name text,
     p_schema_name text,
     p_cr_name text = null,  -- name of CR if keys are pre-allocated 
     p_dry_run boolean = false
@@ -303,11 +310,13 @@ create or replace procedure clearing_house_commit.resolve_primary_keys(
         v_sql text = '';
         v_source_name text;
         v_count integer;
+        v_submission_id integer;
 begin
 
     begin
 
-        v_source_name := (select source_name from clearing_house.tbl_clearinghouse_submissions where submission_id = p_submission_id);
+        v_submission_id := (select submission_id from clearing_house.tbl_clearinghouse_submissions where submission_name = p_submission_name);
+        v_source_name := (select source_name from clearing_house.tbl_clearinghouse_submissions where submission_id = v_submission_id);
 
         perform clearing_house_commit.generate_sead_tables();
 
@@ -320,7 +329,7 @@ begin
 
             execute format('select count(*) from clearing_house.%s where submission_id = $1', v_table_name)
                 into v_count
-                    using p_submission_id;
+                    using v_submission_id;
 
             if v_count = 0 then
                 continue;
@@ -328,7 +337,7 @@ begin
 
 
             v_sql = clearing_house_commit.resolve_primary_key(
-                p_submission_id,
+                p_submission_name,
                 p_schema_name,
                 v_table_name,
                 v_pk_name,

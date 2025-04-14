@@ -21,38 +21,45 @@ end;
 $$ language plpgsql;
 
 create or replace function clearing_house_commit.generate_copy_out_script(
-    p_submission_id int,
+    p_submission_name text,
     p_entity text,
     p_table_name text,
     p_target_folder text) returns text as $$
-declare v_sql text;
-declare v_columns text;
+declare 
+    v_sql text;
+    v_columns text;
+    v_submission_id int;
 begin
+
+    v_submission_id := (select submission_id from clearing_house.tbl_clearinghouse_submissions where submission_name = p_submission_name);
 
     v_columns = clearing_house_commit.get_data_column_names('public', p_table_name);
 
     -- program ''gzip > %s/submission_%s_%s.zip''
-    v_sql = format('\copy (select %s from clearing_house_commit.resolve_%s(%s)) to program ''gzip -qa9 > %s/submission_%s_%s.gz'' with (format text, delimiter E''\t'', encoding ''utf-8'');
+    v_sql = format('\copy (select %s from clearing_house_commit.resolve_%s(%s)) to program ''gzip -qa9 > %s/%s.gz'' with (format text, delimiter E''\t'', encoding ''utf-8'');
     ',
-        v_columns, p_entity, p_submission_id, p_target_folder, p_submission_id, p_entity);
+        v_columns, p_entity, v_submission_id, p_target_folder, p_entity);
 
     return v_sql;
 
 end $$ language plpgsql;
 
 create or replace function clearing_house_commit.generate_copy_in_script(
-    p_submission_id int,
+    p_submission_name text,
     p_entity_name text,
     p_table_name text,
     p_pk_name text,
     p_target_folder text = '/tmp',
     p_delete_existing boolean = FALSE
 ) returns text as $$
-declare v_sql text;
-declare v_delete_sql text;
-declare v_columns text;
+declare 
+    v_sql text;
+    v_delete_sql text;
+    v_columns text;
+    v_submission_id int;
 begin
 
+    v_submission_id := (select submission_id from clearing_house.tbl_clearinghouse_submissions where submission_name = p_submission_name);
     v_columns = clearing_house_commit.get_data_column_names('public', p_table_name);
 
     -- from program ''gunzip < %s/submission_%s_%s.zip''
@@ -64,7 +71,7 @@ begin
 drop table if exists clearing_house_commit.temp_#TABLE#;
 create table clearing_house_commit.temp_#TABLE# as select #COLUMNS# from public.#TABLE# where FALSE;
 
-\\copy clearing_house_commit.temp_#TABLE# from program ''zcat -qac #DIR#/submission_#ID#_#ENTITY#.gz'' with (FORMAT text, DELIMITER E''\t'', ENCODING ''utf-8'');
+\\copy clearing_house_commit.temp_#TABLE# from program ''zcat -qac #DIR#/#ENTITY#.gz'' with (FORMAT text, DELIMITER E''\t'', ENCODING ''utf-8'');
 #DELETE-SQL#
 
 insert into public.#TABLE# (#COLUMNS#)
@@ -86,7 +93,7 @@ delete from public.#TABLE#
     v_sql = replace(v_sql, '#COLUMNS#', v_columns);
     v_sql = replace(v_sql, '#DELETE-SQL#', v_delete_sql);
     v_sql = replace(v_sql, '#TABLE#', p_table_name);
-    v_sql = replace(v_sql, '#ID#', p_submission_id::text);
+    v_sql = replace(v_sql, '#ID#', v_submission_id::text);
     v_sql = replace(v_sql, '#ENTITY#', p_entity_name);
     v_sql = replace(v_sql, '#PK#', p_pk_name);
     v_sql = replace(v_sql, '#DIR#', p_target_folder);
@@ -95,7 +102,7 @@ delete from public.#TABLE#
 end $$ language plpgsql;
 
 create or replace function clearing_house_commit.generate_resolved_submission_copy_script(
-    p_submission_id int,
+    p_submission_name text,
     p_folder character varying,
     p_is_out boolean
 ) returns text as $xyz$
@@ -106,11 +113,14 @@ declare
     v_count integer;
     v_pk_name character varying;
     v_sort_order integer;
+    v_submission_id integer;
 begin
     begin
 
+        v_submission_id := (select submission_id from clearing_house.tbl_clearinghouse_submissions where submission_name = p_submission_name);
+
         -- perform clearing_house_commit.generate_resolve_functions('public', FALSE);
-        -- perform clearing_house_commit.resolve_primary_keys(p_submission_id, 'public', FALSE);
+        -- perform clearing_house_commit.resolve_primary_keys(p_submission_name, 'public', FALSE);
 
 
         v_sql := '';
@@ -126,7 +136,7 @@ begin
 
             execute format('select count(*) from clearing_house.%s where submission_id = $1', v_table_name)
                 into v_count
-                    using p_submission_id;
+                    using v_submission_id;
 
             if v_count = 0 then
                 -- raise notice 'SKIPPED: % no data', v_table_name;
@@ -134,9 +144,9 @@ begin
             end if;
 
             if p_is_out then
-                v_sql = v_sql || E'\n' || clearing_house_commit.generate_copy_out_script(p_submission_id, v_entity_name, v_table_name, p_folder);
+                v_sql = v_sql || E'\n' || clearing_house_commit.generate_copy_out_script(p_submission_name, v_entity_name, v_table_name, p_folder);
             else
-                v_sql = v_sql || E'\n' || clearing_house_commit.generate_copy_in_script(p_submission_id, v_entity_name, v_table_name, v_pk_name, p_folder) || E'\n';
+                v_sql = v_sql || E'\n' || clearing_house_commit.generate_copy_in_script(p_submission_name, v_entity_name, v_table_name, v_pk_name, p_folder) || E'\n';
             end if;
 
         end loop;
@@ -149,7 +159,7 @@ end $xyz$ language plpgsql;
 
 -- select clearing_house_commit.rollback_commit(1)
 
-create or replace function clearing_house_commit.rollback_commit(p_submission_id int)
+create or replace function clearing_house_commit.rollback_commit(p_submission_name text)
 returns void as
 $$
 declare
@@ -159,7 +169,10 @@ declare
   v_sql_count_template text;
   v_sql_delete_template text;
   v_record_count int;
+  v_submission_id int
 begin
+
+    v_submission_id := (select submission_id from clearing_house.tbl_clearinghouse_submissions where submission_name = p_submission_name);
 
 	v_sql_count_template := '
 		select count(*)
@@ -188,13 +201,13 @@ begin
 
 	) Loop
 
-		v_sql := format(v_sql_count_template, v_data.table_name, p_submission_id);
+		v_sql := format(v_sql_count_template, v_data.table_name, v_submission_id);
 
 		execute v_sql into v_record_count;
 
 		if v_record_count > 0 then
 
-			v_sql = format(v_sql_delete_template, v_data.table_name, v_data.pk_name, v_data.table_name, p_submission_id);
+			v_sql = format(v_sql_delete_template, v_data.table_name, v_data.pk_name, v_data.table_name, v_submission_id);
 
 			raise info 'Table %: %', v_data.table_name, v_record_count;
 

@@ -1,6 +1,6 @@
 -- select clearing_house_commit.delete_committed_records_script(1)
 
-create or replace function clearing_house_commit.delete_committed_records_script(p_submission_id int)
+create or replace function clearing_house_commit.delete_committed_records_script(p_submission_name text)
 returns text as
 $$
 declare
@@ -10,8 +10,11 @@ declare
   v_sql_count_template text;
   v_sql_delete_template text;
   v_record_count int;
+  v_submission_id int;
 begin
 
+	v_submission_id := (select submission_id from clearing_house.tbl_clearinghouse_submissions where submission_name = p_submission_name);
+	
 	v_sql_count_template := '
 		select count(*)
 		from clearing_house.%s
@@ -39,13 +42,13 @@ begin
 
 	) Loop
 
-		v_sql := format(v_sql_count_template, v_data.table_name, p_submission_id);
+		v_sql := format(v_sql_count_template, v_data.table_name, v_submission_id);
 
 		execute v_sql into v_record_count;
 
 		if v_record_count > 0 then
 
-			v_sql = format(v_sql_delete_template, v_data.table_name, v_data.pk_name, v_data.table_name, p_submission_id);
+			v_sql = format(v_sql_delete_template, v_data.table_name, v_data.pk_name, v_data.table_name, v_submission_id);
 
 			raise info 'Table %: %', v_data.table_name, v_record_count;
 
@@ -58,13 +61,3 @@ begin
 	return v_sql_script;
 
 end $$ language plpgsql;
-
--- create or replace function clearing_house_commit.rollback_commit(p_submission_id int)
--- returns void as
--- $$
--- declare
---   v_sql text;
--- begin
---     v_sql = clearing_house_commit.delete_committed_records_script(p_submission_id);
---     TODO: reset clearinghouse database etc
--- end $$ language plpgsql;
