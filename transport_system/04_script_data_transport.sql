@@ -21,6 +21,7 @@ end;
 $$ language plpgsql;
 
 create or replace function clearing_house_commit.generate_copy_out_script(
+    p_submission_name text,
     p_entity text,
     p_table_name text,
     p_target_folder text
@@ -31,8 +32,8 @@ declare
 begin
     -- Note: Uses psql variable :submission_id that must be set in surrounding context
     v_columns = clearing_house_commit.get_data_column_names('public', p_table_name);
-    v_sql = format('\copy (select %1$s from clearing_house_commit.resolve_%2$s(:submission_id)) to program ''gzip -qa9 > %3$s/%2$s.gz'' with (format text, delimiter E''\t'', encoding ''utf-8'');',
-        v_columns, p_entity, p_target_folder);
+    v_sql = format('\copy (select %1$s from clearing_house_commit.resolve_%2$s(''%4$s'')) to program ''gzip -qa9 > %3$s/%2$s.gz'' with (format text, delimiter E''\t'', encoding ''utf-8'');',
+        v_columns, p_entity, p_target_folder, p_submission_name);
 
     return v_sql;
 
@@ -114,16 +115,7 @@ begin
         -- perform clearing_house_commit.resolve_primary_keys(p_submission_name, 'public', FALSE);
 
 
-        v_sql := format(E'
-\\set submission_name ''%s''
-\\set submission_id null
-;
-select submission_id
-from clearing_house.tbl_clearinghouse_submissions
-where submission_name = :''submission_name'' \\gset
-;
-
-', p_submission_name);
+        v_sql := '';
 
         for v_table_name, v_pk_name, v_entity_name, v_sort_order in (
             select distinct t.table_name, t.pk_name, t.entity_name, coalesce(x.sort_order, 999)
@@ -144,7 +136,7 @@ where submission_name = :''submission_name'' \\gset
             end if;
 
             if p_is_out then
-                v_sql = v_sql || E'\n' || clearing_house_commit.generate_copy_out_script(v_entity_name, v_table_name, p_folder);
+                v_sql = v_sql || E'\n' || clearing_house_commit.generate_copy_out_script(p_submission_name, v_entity_name, v_table_name, p_folder);
             else
                 v_sql = v_sql || E'\n' || clearing_house_commit.generate_copy_in_script(p_submission_name, v_entity_name, v_table_name, v_pk_name, p_folder) || E'\n';
             end if;
