@@ -64,10 +64,10 @@ create or replace function clearing_house_commit.resolve_%s(p_submission_name te
 declare
     v_submission_id int;
 begin
-    v_submission_id = (select submission_id from clearing_house.tbl_submissions where submission_name = p_submission_name limit 1);
+    v_submission_id = (select submission_id from clearing_house.tbl_clearinghouse_submissions where submission_name = p_submission_name limit 1);
     return query
         select *
-        from clearing_house.resolve_%s(v_submission_id) e;
+        from clearing_house_commit.resolve_%s(v_submission_id) e;
 end $xyz$ language plpgsql;
 
 ', v_entity_name, p_table_name, v_field_clause, p_table_name, v_join_clause, v_entity_name, p_table_name, v_entity_name);
