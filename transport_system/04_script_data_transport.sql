@@ -69,8 +69,6 @@ insert into public.#TABLE# (#COLUMNS#)
     from clearing_house_commit.temp_#TABLE# ;
 
 \\o /dev/null
-select clearing_house_commit.reset_serial_id(''public'', ''#TABLE#'', ''#PK#'');
-\\o
 
 drop table if exists clearing_house_commit.temp_#TABLE#;
 ';
