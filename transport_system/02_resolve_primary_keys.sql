@@ -139,8 +139,8 @@ end; $$ language plpgsql;
 **  Revisions
 **********************************************************************************************************************************/
 
-create or replace function clearing_house_commit.reset_public_sequence_ids()
-returns void as
+create or replace procedure clearing_house_commit.reset_public_sequence_ids()
+as
 $$
 declare
   v_data record;
