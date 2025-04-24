@@ -172,8 +172,7 @@ begin
             where last_value + 1 != next_value
 	) Loop
 
-        raise info 'Sequence % updated to % (was %)',
-			v_data.sequence_name, v_data.next_value, v_data.last_value;
+        -- raise info 'Sequence % updated to % (was %)', v_data.sequence_name, v_data.next_value, v_data.last_value;
 
 		perform setval(v_data.sequence_name, v_data.next_value, false);
 
