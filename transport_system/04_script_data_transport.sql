@@ -61,7 +61,7 @@ begin
 drop table if exists clearing_house_commit.temp_#TABLE#;
 create table clearing_house_commit.temp_#TABLE# as select #COLUMNS# from public.#TABLE# where FALSE;
 
-\\copy clearing_house_commit.temp_#TABLE# from program ''zcat -qac #DIR#/#ENTITY#.gz'' with (FORMAT text, DELIMITER E''\t'', ENCODING ''utf-8'');
+\\copy clearing_house_commit.temp_#TABLE# (#COLUMNS#) from program ''zcat -qac #DIR#/#ENTITY#.gz'' with (FORMAT text, DELIMITER E''\t'', ENCODING ''utf-8'');
 #DELETE-SQL#
 
 insert into public.#TABLE# (#COLUMNS#)
